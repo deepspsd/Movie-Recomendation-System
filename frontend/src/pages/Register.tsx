@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Mail, Lock, User as UserIcon, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuthStore } from "@/store/authStore";
+import toast from "react-hot-toast";
 import moviesCollage from "@/assets/movies-collage.jpg";
 
 const Register = () => {
@@ -12,10 +14,43 @@ const Register = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const { register, isLoading } = useAuthStore();
+  const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle registration logic here
+    
+    if (password !== confirmPassword) {
+      toast.error("Passwords don't match");
+      return;
+    }
+
+    if (password.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+
+    if (!/\d/.test(password)) {
+      toast.error("Password must contain at least one digit");
+      return;
+    }
+
+    if (!/[A-Z]/.test(password)) {
+      toast.error("Password must contain at least one uppercase letter");
+      return;
+    }
+
+    if (!/[a-z]/.test(password)) {
+      toast.error("Password must contain at least one lowercase letter");
+      return;
+    }
+
+    try {
+      await register({ username: name, email, password });
+      navigate('/dashboard');
+    } catch (error) {
+      // Error is handled by the store with toast
+    }
   };
 
   return (
@@ -96,6 +131,9 @@ const Register = () => {
                     required
                   />
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Must be 8+ characters with uppercase, lowercase, and digit
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -128,8 +166,8 @@ const Register = () => {
                 </span>
               </div>
 
-              <Button type="submit" className="w-full" size="lg">
-                Create Account
+              <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+                {isLoading ? "Creating Account..." : "Create Account"}
               </Button>
             </form>
 

@@ -1,19 +1,37 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Mail, Lock, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuthStore } from "@/store/authStore";
+import toast from "react-hot-toast";
 import moviesCollage from "@/assets/movies-collage.jpg";
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const { login, isLoading } = useAuthStore();
+  const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle login logic here
+    
+    // Basic validation
+    if (!email || !password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+    
+    try {
+      await login({ email, password });
+      // Only navigate if login was successful
+      navigate('/dashboard');
+    } catch (error: any) {
+      // Error is handled by the store with toast
+      console.error('Login error:', error);
+    }
   };
 
   return (
@@ -90,8 +108,8 @@ const Login = () => {
                 </Link>
               </div>
 
-              <Button type="submit" className="w-full" size="lg">
-                Sign In
+              <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+                {isLoading ? "Signing in..." : "Sign In"}
               </Button>
             </form>
 

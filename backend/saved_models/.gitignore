@@ -1,0 +1,8 @@
+# Ignore all model files (they're large)
+*.pkl
+
+# Keep metadata for reference
+!*_metadata.json
+
+# Keep this directory
+!.gitignore
