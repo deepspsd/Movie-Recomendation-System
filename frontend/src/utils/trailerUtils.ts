@@ -3,7 +3,7 @@
  * Works with YouTube Data API to find trailers
  */
 
-const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY || 'AIzaSyDwJl8Nh7_TQvLQKfZvqE8pE7gQYLqYqYs';
+const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY || '';
 const YOUTUBE_SEARCH_URL = 'https://www.googleapis.com/youtube/v3/search';
 
 export interface TrailerVideo {
