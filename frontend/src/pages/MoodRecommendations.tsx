@@ -35,14 +35,14 @@ const MOOD_OPTIONS: MoodOption[] = [
   },
   {
     value: 'adventurous',
-    label: 'Adventurous',
+    label: 'Sci-Fi',
     emoji: '🎬',
-    description: 'Action-packed thrillers and adventures',
+    description: 'Action-packed sci-fi thrillers and adventures',
     genres: ['action', 'adventure', 'thriller'],
   },
   {
     value: 'romantic',
-    label: 'Romantic',
+    label: 'Feel-Good',
     emoji: '❤️',
     description: 'Love stories and romantic comedies',
     genres: ['romance', 'comedy'],

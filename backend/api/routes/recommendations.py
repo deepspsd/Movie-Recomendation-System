@@ -108,151 +108,164 @@ def get_content_based_recommendations(db: Session, movie_id: int, limit: int = 1
     return similar_movies
 
 
-def get_mood_recommendations(db: Session, mood: str, limit: int = 20) -> List[Movie]:
-    """Get mood-based recommendations with intelligent genre matching using OMDB"""
+def get_mood_recommendations(db: Session, mood: str, limit: int = 20, user_id: str = None) -> List[Movie]:
+    """Get mood-based recommendations using ML model with mood-specific genre filtering"""
+    global recommendation_model
     
-    # Define mood-specific search terms and IMDb IDs for different moods
+    # Define mood-specific genres with PRIMARY genre (must match) and SECONDARY genres (bonus)
     mood_config = {
         "happy": {
-            "genres": ["comedy", "family", "animation", "music"],
-            "search_terms": ["comedy", "funny", "happy", "family", "animation"],
-            "imdb_ids": [
-                "tt0109830",  # Forrest Gump
-                "tt0110912",  # Pulp Fiction
-                "tt0120737",  # LOTR Fellowship
-                "tt0317248",  # City of God
-                "tt0245429",  # Spirited Away
-                "tt0118799",  # Life Is Beautiful
-                "tt0088763",  # Back to the Future
-                "tt0266543",  # Finding Nemo
-                "tt0435761",  # Toy Story 3
-                "tt1049413",  # Up
-                "tt0892769",  # How to Train Your Dragon
-                "tt2380307",  # Coco
-                "tt0910970",  # WALL-E
-                "tt0120689",  # The Green Mile
-                "tt0095327",  # Grave of the Fireflies
-            ]
+            "primary": ["comedy", "family", "animation"],
+            "secondary": ["music", "adventure"],
+            "exclude": ["horror", "thriller", "war"]
         },
         "sad": {
-            "genres": ["drama", "romance"],
-            "search_terms": ["drama", "emotional", "sad", "romance"],
-            "imdb_ids": [
-                "tt0108052",  # Schindler's List
-                "tt0118799",  # Life Is Beautiful
-                "tt0120689",  # The Green Mile
-                "tt0253474",  # The Pianist
-                "tt0095327",  # Grave of the Fireflies
-                "tt0405094",  # The Lives of Others
-                "tt0364569",  # Oldboy
-                "tt0050083",  # 12 Angry Men
-                "tt0071562",  # The Godfather Part II
-                "tt0043014",  # Sunset Boulevard
-                "tt1675434",  # The Intouchables
-                "tt0338013",  # Eternal Sunshine
-                "tt0361748",  # Inglourious Basterds
-            ]
+            "primary": ["drama"],
+            "secondary": ["romance", "history"],
+            "exclude": ["comedy", "animation"]
         },
         "adventurous": {
-            "genres": ["action", "adventure", "thriller", "fantasy"],
-            "search_terms": ["action", "adventure", "thriller", "epic"],
-            "imdb_ids": [
-                "tt0468569",  # The Dark Knight
-                "tt0167260",  # LOTR Return of the King
-                "tt0167261",  # LOTR Two Towers
-                "tt0120737",  # LOTR Fellowship
-                "tt0137523",  # Fight Club
-                "tt1375666",  # Inception
-                "tt0133093",  # The Matrix
-                "tt0076759",  # Star Wars IV
-                "tt0080684",  # Star Wars V
-                "tt0816692",  # Interstellar
-                "tt0103064",  # Terminator 2
-                "tt0082971",  # Raiders of the Lost Ark
-                "tt0120815",  # Saving Private Ryan
-                "tt1345836",  # The Dark Knight Rises
-                "tt0407887",  # The Departed
-                "tt0482571",  # The Prestige
-            ]
+            "primary": ["action", "adventure", "thriller"],
+            "secondary": ["fantasy", "sci-fi"],
+            "exclude": ["romance", "drama"]
         },
         "romantic": {
-            "genres": ["romance", "comedy"],
-            "search_terms": ["romance", "love", "romantic"],
-            "imdb_ids": [
-                "tt0034583",  # Casablanca
-                "tt0038650",  # It's a Wonderful Life
-                "tt0338013",  # Eternal Sunshine
-                "tt0110413",  # Léon: The Professional
-                "tt0119217",  # Good Will Hunting
-                "tt0112573",  # Braveheart
-                "tt0361748",  # Inglourious Basterds
-                "tt1675434",  # The Intouchables
-                "tt0050083",  # 12 Angry Men
-                "tt0118799",  # Life Is Beautiful
-            ]
+            "primary": ["romance"],
+            "secondary": ["comedy", "drama"],
+            "exclude": ["horror", "action", "thriller"]
         },
         "scared": {
-            "genres": ["horror", "thriller", "mystery"],
-            "search_terms": ["horror", "thriller", "scary", "suspense"],
-            "imdb_ids": [
-                "tt0102926",  # The Silence of the Lambs
-                "tt0114369",  # Se7en
-                "tt0078748",  # Alien
-                "tt0078788",  # Apocalypse Now
-                "tt0054215",  # Psycho
-                "tt0047396",  # Rear Window
-                "tt0114814",  # The Usual Suspects
-                "tt0209144",  # Memento
-                "tt0120586",  # American History X
-                "tt0364569",  # Oldboy
-                "tt0405094",  # The Lives of Others
-                "tt0110413",  # Léon: The Professional
-            ]
+            "primary": ["horror", "thriller"],
+            "secondary": ["mystery", "crime"],
+            "exclude": ["comedy", "family", "animation"]
         },
         "thoughtful": {
-            "genres": ["drama", "documentary", "sci-fi", "history"],
-            "search_terms": ["drama", "philosophical", "thought-provoking"],
-            "imdb_ids": [
-                "tt0111161",  # The Shawshank Redemption
-                "tt0068646",  # The Godfather
-                "tt0071562",  # The Godfather Part II
-                "tt0050083",  # 12 Angry Men
-                "tt0108052",  # Schindler's List
-                "tt0073486",  # One Flew Over the Cuckoo's Nest
-                "tt0099685",  # Goodfellas
-                "tt0060196",  # The Good, the Bad and the Ugly
-                "tt0027977",  # Modern Times
-                "tt0021749",  # City Lights
-                "tt0064116",  # Once Upon a Time in the West
-                "tt0253474",  # The Pianist
-                "tt0816692",  # Interstellar
-                "tt1375666",  # Inception
-                "tt0133093",  # The Matrix
-            ]
+            "primary": ["drama", "documentary"],
+            "secondary": ["sci-fi", "history", "biography"],
+            "exclude": ["comedy", "animation"]
         }
     }
     
     config = mood_config.get(mood.lower(), mood_config["thoughtful"])
-    genres = config["genres"]
-    imdb_ids = config["imdb_ids"]
+    primary_genres = config["primary"]
+    secondary_genres = config.get("secondary", [])
+    exclude_genres = config.get("exclude", [])
     
     try:
-        logger.info(f"Getting mood recommendations for: {mood}")
+        logger.info(f"Getting mood recommendations for: {mood} (Primary: {primary_genres})")
         
-        # Fetch mood-specific movies from OMDB using IMDb IDs
-        mood_movies = []
+        # Initialize model if not loaded
+        if recommendation_model is None:
+            initialize_recommendation_model(db)
+        
+        # Get ALL movies from database with good ratings
+        all_movies = db.query(Movie).filter(
+            Movie.vote_average >= 6.5,
+            Movie.vote_count >= 30
+        ).all()
+        
+        # Filter movies by mood with scoring system
+        mood_scored_movies = []
+        for movie in all_movies:
+            if movie.genres:
+                try:
+                    movie_genres = json.loads(movie.genres) if isinstance(movie.genres, str) else movie.genres
+                    movie_genre_names = [g['name'].lower() if isinstance(g, dict) else str(g).lower() for g in movie_genres]
+                    
+                    # Check if movie has excluded genres - skip it
+                    if any(exc.lower() in movie_genre_names for exc in exclude_genres):
+                        continue
+                    
+                    # Calculate mood match score
+                    score = 0
+                    has_primary = False
+                    
+                    # Primary genre match (required)
+                    for genre in primary_genres:
+                        if genre.lower() in movie_genre_names:
+                            score += 10
+                            has_primary = True
+                    
+                    # Secondary genre match (bonus)
+                    for genre in secondary_genres:
+                        if genre.lower() in movie_genre_names:
+                            score += 3
+                    
+                    # Only include if has at least one primary genre
+                    if has_primary:
+                        # Add movie quality score
+                        quality_score = movie.vote_average * 2 + (movie.popularity / 100)
+                        total_score = score + quality_score
+                        mood_scored_movies.append((movie, total_score))
+                        
+                except Exception as e:
+                    logger.debug(f"Error processing genres for movie {movie.id}: {str(e)}")
+                    pass
+        
+        # Sort by mood match score
+        mood_scored_movies.sort(key=lambda x: x[1], reverse=True)
+        mood_filtered_movies = [movie for movie, score in mood_scored_movies]
+        
+        logger.info(f"Found {len(mood_filtered_movies)} movies matching {mood} mood in database")
+        
+        # If we have enough movies, take top ones
+        if len(mood_filtered_movies) >= limit:
+            top_movies = mood_filtered_movies[:limit * 2]  # Get extra for enrichment
+            
+            # Enrich with OMDB posters
+            movies_to_enrich = [m for m in top_movies if not m.poster_path][:limit]
+            if movies_to_enrich:
+                logger.info(f"Enriching {len(movies_to_enrich)} movies with OMDB data")
+                enriched = enrich_movies_with_external_data(movies_to_enrich, db)
+                enriched_dict = {m.id: m for m in enriched}
+                result = []
+                for movie in top_movies:
+                    if movie.id in enriched_dict:
+                        result.append(enriched_dict[movie.id])
+                    elif movie.poster_path:
+                        result.append(movie)
+                    if len(result) >= limit:
+                        break
+                
+                if result:
+                    logger.info(f"Returning {len(result)} mood-matched movies with posters")
+                    return result[:limit]
+            
+            # Return movies with existing posters
+            movies_with_posters = [m for m in top_movies if m.poster_path][:limit]
+            if movies_with_posters:
+                logger.info(f"Returning {len(movies_with_posters)} mood-matched movies")
+                return movies_with_posters
+        
+        # If not enough movies, try to get OMDB movies matching the mood
+        logger.warning(f"Not enough movies for {mood} mood in database, trying OMDB")
+        
+        # Get OMDB movies and filter by mood
+        omdb_best = omdb_service.get_best_movies(limit=50)
+        omdb_popular = omdb_service.get_popular_movies(limit=30)
+        all_omdb = omdb_best + omdb_popular
+        
+        mood_omdb_movies = []
         seen_ids = set()
         
-        for imdb_id in imdb_ids:
-            if len(mood_movies) >= limit:
-                break
+        for omdb_movie in all_omdb:
+            if omdb_movie['id'] in seen_ids:
+                continue
+            seen_ids.add(omdb_movie['id'])
+            
+            movie_genres = omdb_movie.get('genres', [])
+            if movie_genres:
+                genre_names = [g['name'].lower() if isinstance(g, dict) else str(g).lower() for g in movie_genres]
                 
-            try:
-                omdb_movie = omdb_service.get_movie_by_id(imdb_id)
-                if omdb_movie and omdb_movie['id'] not in seen_ids:
-                    seen_ids.add(omdb_movie['id'])
-                    
-                    # Check if movie exists in DB, otherwise create temporary object
+                # Check excluded genres
+                if any(exc.lower() in genre_names for exc in exclude_genres):
+                    continue
+                
+                # Check primary genres
+                has_primary = any(prim.lower() in genre_names for prim in primary_genres)
+                
+                if has_primary:
+                    # Create Movie object
                     movie = db.query(Movie).filter(Movie.id == omdb_movie['id']).first()
                     if not movie:
                         movie = Movie(
@@ -269,61 +282,51 @@ def get_mood_recommendations(db: Session, mood: str, limit: int = 20) -> List[Mo
                             runtime=omdb_movie.get('runtime', 0)
                         )
                     else:
-                        # Update with OMDB poster if missing
                         if not movie.poster_path:
                             movie.poster_path = omdb_movie.get('poster_path')
                         if not movie.backdrop_path:
                             movie.backdrop_path = omdb_movie.get('backdrop_path')
-                    mood_movies.append(movie)
-            except Exception as e:
-                logger.debug(f"Failed to fetch movie {imdb_id}: {str(e)}")
-                continue
-        
-        if mood_movies:
-            logger.info(f"Found {len(mood_movies)} OMDB movies for mood: {mood}")
-            return mood_movies[:limit]
-        
-        # Fallback: Query database movies
-        logger.info("Falling back to database movies for mood recommendations")
-        movies = db.query(Movie).filter(
-            Movie.vote_average >= 7.0,
-            Movie.vote_count >= 50
-        ).all()
-        
-        # Filter by genre
-        db_mood_movies = []
-        for movie in movies:
-            if movie.genres:
-                try:
-                    movie_genres = json.loads(movie.genres) if isinstance(movie.genres, str) else movie.genres
-                    movie_genre_names = [g['name'].lower() if isinstance(g, dict) else str(g).lower() for g in movie_genres]
                     
-                    if any(genre.lower() in movie_genre_names for genre in genres):
-                        db_mood_movies.append(movie)
-                except:
-                    pass
+                    mood_omdb_movies.append(movie)
+                    
+                    if len(mood_omdb_movies) >= limit:
+                        break
         
-        # Sort by rating and popularity
-        db_mood_movies.sort(key=lambda m: (m.vote_average * 0.7 + (m.popularity / 100) * 0.3), reverse=True)
+        if mood_omdb_movies:
+            logger.info(f"Returning {len(mood_omdb_movies)} OMDB movies matching {mood} mood")
+            return mood_omdb_movies[:limit]
         
-        # Enrich with OMDB posters
-        movies_to_enrich = [m for m in db_mood_movies[:limit] if not m.poster_path]
-        if movies_to_enrich:
-            enriched = enrich_movies_with_external_data(movies_to_enrich, db)
-            enriched_dict = {m.id: m for m in enriched}
-            result = []
-            for movie in db_mood_movies[:limit]:
-                if movie.id in enriched_dict:
-                    result.append(enriched_dict[movie.id])
-                elif movie.poster_path:
-                    result.append(movie)
-            return result if result else get_popular_movies(db, limit)
+        # Final fallback - just return popular movies
+        logger.warning(f"No mood-matching movies found, returning popular movies")
+        return get_popular_movies(db, limit)
         
-        return db_mood_movies[:limit] if db_mood_movies else get_popular_movies(db, limit)
     except Exception as e:
         logger.error(f"Error in mood recommendations: {str(e)}")
         import traceback
         logger.error(traceback.format_exc())
+        # Even in error, try to filter popular by mood
+        try:
+            popular = get_popular_movies(db, limit * 2)
+            mood_popular = []
+            for movie in popular:
+                if movie.genres:
+                    try:
+                        movie_genres = json.loads(movie.genres) if isinstance(movie.genres, str) else movie.genres
+                        genre_names = [g['name'].lower() if isinstance(g, dict) else str(g).lower() for g in movie_genres]
+                        
+                        # Check if matches primary genres
+                        if any(prim.lower() in genre_names for prim in primary_genres):
+                            mood_popular.append(movie)
+                            if len(mood_popular) >= limit:
+                                break
+                    except:
+                        pass
+            
+            if mood_popular:
+                return mood_popular[:limit]
+        except:
+            pass
+        
         return get_popular_movies(db, limit)
 
 
@@ -979,29 +982,29 @@ async def get_mood_recommendations_endpoint(
 ):
     """
     Get movie recommendations based on user's mood with ML personalization
-    Uses OMDB API to ensure movies have posters and details
+    Uses trained ML model (collaborative_filtering_trained.pkl) filtered by mood genres
     """
     try:
-        # Use mood-based recommendations with OMDB (more reliable for mood matching)
-        movies = get_mood_recommendations(db, mood, limit)
+        # Use ML-based mood recommendations with user personalization
+        movies = get_mood_recommendations(db, mood, limit, user_id=current_user.id)
         
         # If we got movies, return them
         if movies and len(movies) > 0:
-            logger.info(f"Returning {len(movies)} mood recommendations for: {mood}")
+            logger.info(f"Returning {len(movies)} ML-based mood recommendations for: {mood}")
             return RecommendationResponse(
                 movies=movies,
-                algorithm="mood_based_omdb",
-                explanation=f"Movies matching your {mood} mood, curated from top-rated films"
+                algorithm="mood_based_ml",
+                explanation=f"Personalized {mood} mood recommendations using trained ML model"
             )
         
-        # Fallback: Try personalized recommendations with mood context
-        logger.info("Falling back to personalized recommendations with mood context")
+        # Fallback: Try general personalized recommendations with mood context
+        logger.info("Falling back to general personalized recommendations")
         movies = get_advanced_recommendations(db, current_user.id, "hybrid", limit, mood=mood)
         
         return RecommendationResponse(
             movies=movies,
-            algorithm="mood_based_ml",
-            explanation=f"Personalized {mood} mood recommendations using AI"
+            algorithm="hybrid_ml",
+            explanation=f"Personalized recommendations using hybrid ML algorithm"
         )
     except Exception as e:
         logger.error(f"Error getting mood recommendations: {str(e)}")
