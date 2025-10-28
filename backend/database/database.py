@@ -2,27 +2,18 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 from contextlib import contextmanager
+import sys
 import os
-from dotenv import load_dotenv
 from pathlib import Path
 
-# Load .env from project root (two levels up from database.py)
-env_path = Path(__file__).parent.parent.parent / '.env'
-load_dotenv(dotenv_path=env_path)
+# Add parent directory to path to import config
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# Build DATABASE_URL from individual components
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_HOST = os.getenv("DB_HOST")
-DB_PORT = os.getenv("DB_PORT")
-DB_NAME = os.getenv("DB_NAME")
+# Import centralized config
+from config import DATABASE_URL, DB_SSL_CA, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME
 
-if not all([DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME]):
+if not DATABASE_URL:
     raise ValueError("Database credentials not found in .env file. Please check DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME")
-
-# Construct MySQL connection URL with proper SSL handling
-DB_SSL_CA = os.getenv('DB_SSL_CA', '')
-DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 # Handle SSL configuration
 connect_args = {
@@ -101,9 +92,9 @@ def init_db():
     """
     try:
         Base.metadata.create_all(bind=engine)
-        print("✅ Database tables created successfully!")
+        print("[OK] Database tables created successfully!")
     except Exception as e:
-        print(f"❌ Database initialization failed: {e}")
+        print(f"[ERROR] Database initialization failed: {e}")
         # Don't raise the exception to allow the app to start even without database
         pass
 
@@ -114,4 +105,4 @@ def close_db():
     Call this when shutting down the application.
     """
     engine.dispose()
-    print("✅ Database connections closed!")
+    print("[OK] Database connections closed!")

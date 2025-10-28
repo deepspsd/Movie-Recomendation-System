@@ -290,6 +290,11 @@ export const recommendationsAPI = {
   submitFeedback: async (data: AdaptiveWeightUpdate): Promise<void> => {
     await api.post('/recommendations/feedback', data);
   },
+
+  refresh: async (): Promise<{ status: string; message: string; cleared_count: number }> => {
+    const response = await api.post('/recommendations/refresh');
+    return response.data;
+  },
 };
 
 // Ratings API

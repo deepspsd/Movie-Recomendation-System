@@ -5,15 +5,18 @@ OMDb: Alternative free API (fallback)
 """
 
 import httpx
-import asyncio
+import requests
 import logging
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime, timedelta
-import os
-from dotenv import load_dotenv
+import sys
+from pathlib import Path
 
-# Load environment variables
-load_dotenv()
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Import centralized config
+from config import TMDB_API_KEY, OMDB_API_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +29,12 @@ class TMDBService:
     
     def __init__(self):
         # TMDB configuration
-        self.tmdb_api_key = os.getenv("TMDB_API_KEY")
+        self.tmdb_api_key = TMDB_API_KEY
         self.tmdb_base_url = "https://api.themoviedb.org/3"
         self.image_base_url = "https://image.tmdb.org/t/p"
         
         # OMDb configuration
-        self.omdb_api_key = os.getenv("OMDB_API_KEY")
+        self.omdb_api_key = OMDB_API_KEY
         self.omdb_base_url = "http://www.omdbapi.com/"
         
         # Determine which API to use

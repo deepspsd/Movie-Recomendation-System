@@ -5,9 +5,10 @@ from fastapi.exceptions import RequestValidationError
 from contextlib import asynccontextmanager
 import uvicorn
 import os
-from dotenv import load_dotenv
-from pathlib import Path
 import logging
+
+# Import centralized config (loads .env automatically)
+from config import API_HOST, API_PORT, DEBUG, CORS_ORIGINS
 
 # Import custom middleware and error handlers
 from utils.middleware import (
@@ -17,13 +18,6 @@ from utils.middleware import (
     RateLimitMiddleware
 )
 from utils.error_handlers import register_error_handlers
-
-# Load environment variables from project root
-env_path = Path(__file__).parent.parent / '.env'
-if not env_path.exists():
-    # Try alternative path if running from different location
-    env_path = Path(__file__).parent / '.env'
-load_dotenv(dotenv_path=env_path)
 
 # Validate environment before starting (skip during testing)
 from utils.env_validator import validate_environment
@@ -42,12 +36,6 @@ from models import User, Movie, Rating, Watchlist, Review
 # Import routes
 from api.routes import auth, recommendations, movies, ratings, watchlist
 from routes import omdb_routes
-
-# Get configuration from environment
-API_HOST = os.getenv("API_HOST", "0.0.0.0")
-API_PORT = int(os.getenv("API_PORT", "8000"))
-DEBUG = os.getenv("DEBUG", "True").lower() == "true"
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", '["http://localhost:3000","http://localhost:5173"]')
 
 # Parse CORS origins
 import json

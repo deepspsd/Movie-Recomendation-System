@@ -59,29 +59,34 @@ class CollaborativeFilteringModel:
         
     def prepare_data(self, ratings_data: List[Dict], movies_data: List[Dict]):
         """
-        Prepare data for collaborative filtering
+        Prepare data for collaborative filtering (MEMORY-OPTIMIZED)
         
         Args:
             ratings_data: List of dictionaries with user_id, movie_id, rating
             movies_data: List of dictionaries with movie information
         """
         try:
-            # Convert to DataFrames
+            # Convert to DataFrames with optimized dtypes
             self.ratings_df = pd.DataFrame(ratings_data)
             self.movies_df = pd.DataFrame(movies_data)
             
-            # Create user-movie matrix
+            # Optimize dtypes to reduce memory usage
+            if 'rating' in self.ratings_df.columns:
+                self.ratings_df['rating'] = self.ratings_df['rating'].astype('float32')
+            
+            # Create user-movie matrix with float32 for memory efficiency
             self.user_movie_matrix = self.ratings_df.pivot_table(
                 index='user_id', 
                 columns='movie_id', 
                 values='rating'
-            ).fillna(0)
+            ).fillna(0).astype('float32')
             
             # Get user and movie IDs
             self.user_ids = list(self.user_movie_matrix.index)
             self.movie_ids = list(self.user_movie_matrix.columns)
             
             logger.info(f"Data prepared: {len(self.user_ids)} users, {len(self.movie_ids)} movies")
+            logger.info(f"Memory usage: {self.user_movie_matrix.memory_usage(deep=True).sum() / 1024**2:.1f} MB")
             return True
             
         except Exception as e:
@@ -90,11 +95,14 @@ class CollaborativeFilteringModel:
     
     def compute_user_similarity(self):
         """
-        Compute user similarity matrix using cosine similarity
+        Compute user similarity matrix using cosine similarity (MEMORY-OPTIMIZED)
         """
         try:
+            # Use float32 for memory efficiency
+            matrix_values = self.user_movie_matrix.values.astype(np.float32)
+            
             # Compute cosine similarity between users
-            self.user_similarity_matrix = cosine_similarity(self.user_movie_matrix)
+            self.user_similarity_matrix = cosine_similarity(matrix_values).astype(np.float32)
             
             # Convert to DataFrame for easier handling
             self.user_similarity_df = pd.DataFrame(
@@ -104,6 +112,10 @@ class CollaborativeFilteringModel:
             )
             
             logger.info("User similarity matrix computed")
+            
+            # Clean up
+            import gc
+            gc.collect()
             return True
             
         except Exception as e:
@@ -328,21 +340,25 @@ class CollaborativeFilteringModel:
 
     def train_svd_model(self, n_components: int = 50):
         """
-        Train SVD model for matrix factorization
+        Train SVD model for matrix factorization (MEMORY-OPTIMIZED)
         """
         try:
             if self.user_movie_matrix is None:
                 logger.error("User-movie matrix not prepared")
                 return False
             
-            # Convert to sparse matrix for efficiency
-            sparse_matrix = csr_matrix(self.user_movie_matrix.values)
+            # Convert to sparse matrix for efficiency with float32
+            sparse_matrix = csr_matrix(self.user_movie_matrix.values.astype(np.float32))
             
             # Train SVD model
             self.svd_model = TruncatedSVD(n_components=n_components, random_state=42)
             self.svd_model.fit(sparse_matrix)
             
             logger.info(f"SVD model trained with {n_components} components")
+            
+            # Clean up
+            import gc
+            gc.collect()
             return True
             
         except Exception as e:
@@ -351,22 +367,27 @@ class CollaborativeFilteringModel:
 
     def train_knn_model(self, n_neighbors: int = 20):
         """
-        Train KNN model for collaborative filtering
+        Train KNN model for collaborative filtering (MEMORY-OPTIMIZED)
         """
         try:
             if self.user_movie_matrix is None:
                 logger.error("User-movie matrix not prepared")
                 return False
             
-            # Train KNN model
+            # Train KNN model with float32 and parallel processing
             self.knn_model = NearestNeighbors(
                 n_neighbors=n_neighbors, 
                 metric='cosine', 
-                algorithm='brute'
+                algorithm='brute',
+                n_jobs=-1  # Use all CPU cores
             )
-            self.knn_model.fit(self.user_movie_matrix)
+            self.knn_model.fit(self.user_movie_matrix.values.astype(np.float32))
             
             logger.info(f"KNN model trained with {n_neighbors} neighbors")
+            
+            # Clean up
+            import gc
+            gc.collect()
             return True
             
         except Exception as e:
@@ -376,7 +397,7 @@ class CollaborativeFilteringModel:
     def train_als_model(self, n_factors: int = 50, n_iterations: int = 10, 
                        lambda_reg: float = 0.1, dropout_rate: float = 0.0):
         """
-        Train ALS (Alternating Least Squares) model with dropout regularization
+        Train ALS (Alternating Least Squares) model with dropout regularization (MEMORY-OPTIMIZED)
         
         Args:
             n_factors: Number of latent factors
@@ -392,14 +413,14 @@ class CollaborativeFilteringModel:
             self.n_factors = n_factors
             self.dropout_rate = dropout_rate
             
-            # Convert to sparse matrix
-            R = csr_matrix(self.user_movie_matrix.values)
+            # Convert to sparse matrix with float32
+            R = csr_matrix(self.user_movie_matrix.values.astype(np.float32))
             n_users, n_items = R.shape
             
-            # Initialize factor matrices randomly
+            # Initialize factor matrices randomly with float32
             np.random.seed(42)
-            self.user_factors = np.random.normal(0, 0.1, (n_users, n_factors))
-            self.item_factors = np.random.normal(0, 0.1, (n_items, n_factors))
+            self.user_factors = np.random.normal(0, 0.1, (n_users, n_factors)).astype(np.float32)
+            self.item_factors = np.random.normal(0, 0.1, (n_items, n_factors)).astype(np.float32)
             
             logger.info(f"Training ALS model: {n_factors} factors, {n_iterations} iterations")
             
@@ -411,14 +432,25 @@ class CollaborativeFilteringModel:
                 # Fix user factors, update item factors
                 self.item_factors = self._als_step(R.T, self.user_factors, lambda_reg, dropout_rate)
                 
-                # Calculate RMSE for monitoring
+                # Calculate RMSE for monitoring (less frequently to save time)
                 if iteration % 2 == 0:
+                    # Sample for RMSE calculation to save memory
+                    R_dense = R.toarray()
+                    mask = R_dense > 0
                     predictions = self.user_factors @ self.item_factors.T
-                    mask = R.toarray() > 0
-                    rmse = np.sqrt(np.mean((R.toarray()[mask] - predictions[mask]) ** 2))
+                    rmse = np.sqrt(np.mean((R_dense[mask] - predictions[mask]) ** 2))
                     logger.info(f"ALS Iteration {iteration + 1}/{n_iterations}, RMSE: {rmse:.4f}")
+                    
+                    # Clean up
+                    del R_dense, mask, predictions
+                    import gc
+                    gc.collect()
             
             logger.info(f"ALS model trained successfully")
+            
+            # Final cleanup
+            import gc
+            gc.collect()
             return True
             
         except Exception as e:
@@ -428,7 +460,7 @@ class CollaborativeFilteringModel:
     def _als_step(self, R: csr_matrix, fixed_factors: np.ndarray, 
                   lambda_reg: float, dropout_rate: float) -> np.ndarray:
         """
-        Single ALS step with dropout regularization
+        Single ALS step with dropout regularization (MEMORY-OPTIMIZED)
         
         Args:
             R: Rating matrix (sparse)
@@ -440,14 +472,17 @@ class CollaborativeFilteringModel:
             Updated factor matrix
         """
         n_users, n_factors = R.shape[0], fixed_factors.shape[1]
-        updated_factors = np.zeros((n_users, n_factors))
+        updated_factors = np.zeros((n_users, n_factors), dtype=np.float32)
         
         # Apply dropout mask to fixed factors
         if dropout_rate > 0:
             dropout_mask = np.random.binomial(1, 1 - dropout_rate, fixed_factors.shape)
-            fixed_factors_dropout = fixed_factors * dropout_mask / (1 - dropout_rate)
+            fixed_factors_dropout = (fixed_factors * dropout_mask / (1 - dropout_rate)).astype(np.float32)
         else:
-            fixed_factors_dropout = fixed_factors
+            fixed_factors_dropout = fixed_factors.astype(np.float32)
+        
+        # Pre-compute regularization matrix
+        lambda_eye = (lambda_reg * np.eye(n_factors)).astype(np.float32)
         
         # Update each user/item
         for u in range(n_users):
@@ -458,13 +493,13 @@ class CollaborativeFilteringModel:
                 continue
             
             # Get ratings and factors for rated items
-            ratings = R[u, rated_items].toarray().flatten()
+            ratings = R[u, rated_items].toarray().flatten().astype(np.float32)
             factors = fixed_factors_dropout[rated_items]
             
             # Solve least squares with regularization
             # (F^T F + λI) x = F^T r
-            A = factors.T @ factors + lambda_reg * np.eye(n_factors)
-            b = factors.T @ ratings
+            A = (factors.T @ factors + lambda_eye).astype(np.float32)
+            b = (factors.T @ ratings).astype(np.float32)
             
             try:
                 updated_factors[u] = np.linalg.solve(A, b)

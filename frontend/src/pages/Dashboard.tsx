@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Plus, TrendingUp, Sparkles, Clock, Star, Film, Heart, Eye, Award, Zap, BarChart3, ArrowUp } from "lucide-react";
+import { Play, Plus, TrendingUp, Sparkles, Clock, Star, Film, Heart, Eye, Award, Zap, BarChart3, ArrowUp, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -13,6 +13,7 @@ import { DashboardSkeleton } from "@/components/LoadingSkeleton";
 import { AlgorithmSelector } from "@/components/recommendations/AlgorithmSelector";
 import { UserInteractionPanel } from "@/components/dashboard/UserInteractionPanel";
 import { EnhancedMovieCard } from "@/components/dashboard/EnhancedMovieCard";
+import { ProfessionalMovieCard } from "@/components/recommendations/ProfessionalMovieCard";
 import { RecommendationFilters, type FilterOptions } from "@/components/dashboard/RecommendationFilters";
 import { moviesAPI, recommendationsAPI, watchlistAPI, ratingsAPI } from "@/services/api";
 import { getImageUrl, formatRating } from "@/utils/helpers";
@@ -59,6 +60,7 @@ const EnhancedDashboard = () => {
     viewMode: 'grid',
   });
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
@@ -237,6 +239,22 @@ const EnhancedDashboard = () => {
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleRefreshRecommendations = async () => {
+    setIsRefreshing(true);
+    try {
+      const result = await recommendationsAPI.refresh();
+      toast.success(result.message, { icon: '🔄', duration: 3000 });
+      
+      // Fetch new recommendations
+      await fetchRecommendations(selectedAlgorithm);
+    } catch (error) {
+      console.error('Error refreshing recommendations:', error);
+      toast.error('Failed to refresh recommendations');
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   return (
@@ -427,10 +445,22 @@ const EnhancedDashboard = () => {
                   </div>
                 </div>
               </div>
-              <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 px-4 py-2 text-sm font-semibold shadow-lg shadow-purple-500/20">
-                <Zap className="w-4 h-4 mr-2" />
-                {selectedAlgorithm.toUpperCase()} AI
-              </Badge>
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefreshRecommendations}
+                  disabled={isRefreshing}
+                  className="gap-2"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+                <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 px-4 py-2 text-sm font-semibold shadow-lg shadow-purple-500/20">
+                  <Zap className="w-4 h-4 mr-2" />
+                  {selectedAlgorithm.toUpperCase()} AI
+                </Badge>
+              </div>
             </div>
 
             {/* Filters */}
@@ -467,23 +497,17 @@ const EnhancedDashboard = () => {
                   </div>
                 </div>
 
-                <div className={filters.viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4' : 'space-y-4'}>
+                <div className={filters.viewMode === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6' : 'space-y-4'}>
                   {filteredRecommendations.map((movie, index) => (
-                    <motion.div
+                    <ProfessionalMovieCard
                       key={movie.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: Math.min(index * 0.03, 0.5), duration: 0.3 }}
-                    >
-                      <EnhancedMovieCard
-                        movie={movie}
-                        recommendationScore={0.85}
-                        contentScore={contentWeight}
-                        collaborativeScore={collaborativeWeight}
-                        onWatchlistToggle={fetchDashboardData}
-                        onRatingChange={fetchDashboardData}
-                      />
-                    </motion.div>
+                      movie={movie}
+                      recommendationScore={0.85 - (index * 0.05)}
+                      rank={index + 1}
+                      showRank={index < 3}
+                      onWatchlistToggle={fetchDashboardData}
+                      onRatingChange={fetchDashboardData}
+                    />
                   ))}
                 </div>
               </>

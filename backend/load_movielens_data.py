@@ -126,7 +126,7 @@ def load_movielens_1m():
 
 
 def load_movielens_25m():
-    """Load MovieLens 25M dataset"""
+    """Load MovieLens 25M dataset (MEMORY-OPTIMIZED)"""
     data_dir = Path("data/ml-25m")
     
     if not data_dir.exists():
@@ -138,11 +138,17 @@ def load_movielens_25m():
         logger.info("Loading movies...")
         movies = pd.read_csv(data_dir / "movies.csv")
         
-        # Load ratings (userId,movieId,rating,timestamp)
-        logger.info("Loading ratings...")
-        ratings = pd.read_csv(data_dir / "ratings.csv")
+        # Load ratings with optimized dtypes (userId,movieId,rating,timestamp)
+        logger.info("Loading ratings (memory-optimized)...")
+        logger.info("⚠️  This is a large file, using optimized loading...")
+        ratings = pd.read_csv(
+            data_dir / "ratings.csv",
+            dtype={'userId': 'int32', 'movieId': 'int32', 'rating': 'float32', 'timestamp': 'int64'},
+            usecols=['userId', 'movieId', 'rating', 'timestamp']  # Only load needed columns
+        )
         
         logger.info(f"Loaded {len(movies)} movies, {len(ratings)} ratings")
+        logger.info(f"Memory usage: {ratings.memory_usage(deep=True).sum() / 1024**2:.1f} MB")
         return movies, ratings
         
     except Exception as e:
@@ -152,7 +158,7 @@ def load_movielens_25m():
 
 def import_to_database(movies_df, ratings_df, users_df=None, limit_movies=1000, limit_ratings=10000):
     """
-    Import MovieLens data to database
+    Import MovieLens data to database (MEMORY-OPTIMIZED)
     
     Args:
         movies_df: Movies DataFrame
@@ -161,6 +167,7 @@ def import_to_database(movies_df, ratings_df, users_df=None, limit_movies=1000, 
         limit_movies: Maximum number of movies to import
         limit_ratings: Maximum number of ratings to import
     """
+    import gc
     try:
         init_db()
         
@@ -217,6 +224,9 @@ def import_to_database(movies_df, ratings_df, users_df=None, limit_movies=1000, 
             
             db.commit()
             logger.info(f"Movies import complete: {movies_added} added")
+            
+            # Clean up
+            gc.collect()
             
             # Import Users
             if users_df is not None:
@@ -310,6 +320,8 @@ def import_to_database(movies_df, ratings_df, users_df=None, limit_movies=1000, 
             db.commit()
             logger.info(f"Ratings import complete: {ratings_added} added")
             
+            # Clean up
+            gc.collect()
             return True
             
     except Exception as e:
